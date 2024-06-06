@@ -2222,6 +2222,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 		hor	horizontally, height of windows is not affected
 		both	width and height of windows is affected
 
+		*'elastictabstop'* *'ets'* *'noelastictabstop'* *'noets'*
+'elastictabstop' 'ets'	boolean	(default off)
+			local to buffer
+	Align tabstops on adjacent lines. When this is set, 'softtabstop',
+	'tabstop', 'expandtab' and 'smarttab' are ignored.
+
 				*'emoji'* *'emo'* *'noemoji'* *'noemo'*
 'emoji' 'emo'		boolean	(default on)
 			global

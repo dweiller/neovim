@@ -2422,6 +2422,21 @@ local options = {
       immutable = true,
     },
     {
+      abbreviation = 'ets',
+      defaults = { if_true = false },
+      desc = [=[
+        Align tabstops on adjacent lines. When this is set, 'softtabstop',
+        'tabstop', 'expandtab' and 'smarttab' are ignored.
+      ]=],
+      full_name = 'elastictabstop',
+      -- redraw = { 'current_buffer' },
+      scope = { 'buf' },
+      short_desc = N_('use elastic tabstops'),
+      type = 'boolean',
+      -- enable_if = false,
+      varname = 'p_ets',
+    },
+    {
       abbreviation = 'emo',
       cb = 'did_set_emoji',
       defaults = true,

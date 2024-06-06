@@ -4689,6 +4689,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return &(buf->b_p_fixeol);
   case kOptExpandtab:
     return &(buf->b_p_et);
+  case kOptElastictabstop:
+    return &(buf->b_p_ets);
   case kOptFileencoding:
     return &(buf->b_p_fenc);
   case kOptFileformat:
