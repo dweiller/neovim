@@ -145,6 +145,118 @@ int tabstop_padding(colnr_T col, OptInt ts_arg, const colnr_T *vts)
   return padding;
 }
 
+/// Calculate the width of an elastic tabstop cell.
+/// The line must have at least `cell + 1` many tabs.
+int elastic_tabstop_cell_size(int cell, linenr_T lnum, buf_T *buf)
+{
+  int line_len = ml_get_buf_len(buf, lnum);
+
+  char *ml = ml_get_buf(buf, lnum);
+  int tab_count = 0;
+
+  int col_start = 0;
+
+  for (; tab_count < cell && col_start < line_len; col_start++) {
+    if (ml[col_start] == '\t') {
+      tab_count++;
+    }
+  }
+
+  int cell_size = line_len - col_start;
+  for (int i = col_start; i < line_len; i++) {
+    if (ml[i] == '\t') {
+      cell_size = i - col_start;
+      break;
+    }
+  }
+
+  return cell_size;
+}
+
+int elastic_tabstop_column_block_cell_size(int cell, linenr_T start, int line_count, buf_T *buf)
+{
+  assert(start + line_count <= buf->b_ml.ml_line_count);
+
+  int block_cell_size = 0;
+
+  for (int i = start; i < start + line_count; i++) {
+    int cell_size = elastic_tabstop_cell_size(cell, i, buf);
+    if (block_cell_size < cell_size) {
+      block_cell_size = cell_size;
+    }
+  }
+  return block_cell_size;
+}
+
+int line_tab_count(linenr_T lnum, buf_T *buf)
+{
+  int line_len = ml_get_buf_len(buf, lnum);
+  char *ml = ml_get_buf(buf, lnum);
+
+  int tab_count = 0;
+
+  for (int i = 0; i < line_len; i++) {
+    if (ml[i] == '\t') {
+      tab_count++;
+    }
+  }
+
+  return tab_count;
+}
+
+linenr_T column_block_start(int cell, linenr_T line, buf_T *buf)
+{
+  assert(line < buf->b_ml.ml_line_count);
+
+  for (int l = line - 1; l > 0; l--) {
+    if (line_tab_count(l, buf) < cell) {
+      return l + 1;
+    }
+  }
+
+  return 1;
+}
+
+linenr_T column_block_end(int cell, linenr_T line, buf_T *buf)
+{
+  int line_count = buf->b_ml.ml_line_count;
+  assert(line < line_count);
+
+  for (int l = line + 1; l < line_count; l++) {
+    if (line_tab_count(l, buf) < cell) {
+      return l - 1;
+    }
+  }
+
+  return line;
+}
+
+int elastic_tabstop_padding(colnr_T col, linenr_T lnum, OptInt ts_arg, buf_T *buf)
+{
+  int ts = ts_arg == 0 ? 8 : ts_arg;
+  int ts_before = 0;
+  char *ml = ml_get_buf(buf, lnum);
+  assert(col < ml_get_buf_len(buf, lnum));
+
+  for (int i = 0; i <= col; i++) {
+    if (ml[i] == '\t') {
+      ts_before += 1;
+    }
+  }
+
+  linenr_T start = column_block_start(ts_before, lnum, buf);
+  linenr_T end = column_block_end(ts_before, lnum, buf);
+
+  colnr_T ts_index = 0;
+
+  for (int cell = 0; cell <= ts_before; cell++) {
+    int size = elastic_tabstop_column_block_cell_size(cell, start, end - start + 1, buf);
+    ts_index += size == 0 ? ts : size;
+  }
+
+  return ts_index - col;
+}
+
 /// Find the size of the tab that covers a particular column.
 ///
 /// If this is being called as part of a shift operation, col is not the cursor
