@@ -1840,6 +1840,15 @@ vim.o.ead = vim.o.eadirection
 vim.go.eadirection = vim.o.eadirection
 vim.go.ead = vim.go.eadirection
 
+--- Align tabstops on adjacent lines. When this is set, 'softtabstop',
+--- 'tabstop', 'expandtab' and 'smarttab' are ignored.
+---
+--- @type boolean
+vim.o.elastictabstop = false
+vim.o.ets = vim.o.elastictabstop
+vim.bo.elastictabstop = vim.o.elastictabstop
+vim.bo.ets = vim.bo.elastictabstop
+
 --- When on all Unicode emoji characters are considered to be full width.
 --- This excludes "text emoji" characters, which are normally displayed as
 --- single width. However, such "text emoji" are treated as full-width
