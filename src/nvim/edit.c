@@ -2918,7 +2918,7 @@ static void replace_do_bs(int limit_col)
       // Get the number of screen cells used by the character we are
       // going to delete.
       getvcol(curwin, &curwin->w_cursor, NULL, &start_vcol, NULL);
-      orig_vcols = win_chartabsize(curwin, get_cursor_pos_ptr(), start_vcol);
+      orig_vcols = win_chartabsize(curwin, get_cursor_pos_ptr(), curwin->w_cursor.lnum, start_vcol);
     }
     del_char_after_col(limit_col);
     if (l_State & VREPLACE_FLAG) {
@@ -2932,7 +2932,7 @@ static void replace_do_bs(int limit_col)
       int ins_len = get_cursor_pos_len() - orig_len;
       int vcol = start_vcol;
       for (int i = 0; i < ins_len; i++) {
-        vcol += win_chartabsize(curwin, p + i, vcol);
+        vcol += win_chartabsize(curwin, p + i, curwin->w_cursor.lnum, vcol);
         i += utfc_ptr2len(p) - 1;
       }
       vcol -= start_vcol;
@@ -3808,7 +3808,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
           space_sci = sci;
           space_vcol = vcol;
         }
-        vcol += charsize_nowrap(curbuf, sci.ptr, use_ts, vcol, sci.chr.value);
+        vcol += charsize_nowrap(curwin, sci.ptr, use_ts, curwin->w_cursor.lnum, vcol, sci.chr.value);
         sci = utfc_next(sci);
         prev_space = cur_space;
       }
@@ -3824,7 +3824,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
       // Find the position to stop backspacing.
       // Use charsize_nowrap() so that virtual text and wrapping are ignored.
       while (true) {
-        int size = charsize_nowrap(curbuf, space_sci.ptr, use_ts, space_vcol, space_sci.chr.value);
+        int size = charsize_nowrap(curwin, space_sci.ptr, use_ts, curwin->w_cursor.lnum, space_vcol, space_sci.chr.value);
         if (space_vcol + size > want_vcol) {
           break;
         }
@@ -4250,12 +4250,12 @@ static bool ins_tab(void)
   } else if (tabstop_count(curbuf->b_p_vsts_array) > 0
              || curbuf->b_p_sts != 0) {
     // use 'softtabstop' when set
-    temp = tabstop_padding(get_nolist_virtcol(),
+    temp = tabstop_padding(curwin, curwin->w_cursor.lnum, get_nolist_virtcol(),
                            get_sts_value(),
                            curbuf->b_p_vsts_array);
   } else {
     // otherwise use 'tabstop'
-    temp = tabstop_padding(get_nolist_virtcol(),
+    temp = tabstop_padding(curwin, curwin->w_cursor.lnum, get_nolist_virtcol(),
                            curbuf->b_p_ts,
                            curbuf->b_p_vts_array);
   }

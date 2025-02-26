@@ -755,7 +755,7 @@ static void get_col(typval_T *argvars, typval_T *rettv, bool charcol)
       if (virtual_active(curwin) && fp == &curwin->w_cursor) {
         char *p = get_cursor_pos_ptr();
         if (curwin->w_cursor.coladd >=
-            (colnr_T)win_chartabsize(curwin, p,
+            (colnr_T)win_chartabsize(curwin, p, curwin->w_cursor.lnum,
                                      curwin->w_virtcol - curwin->w_cursor.coladd)) {
           int l;
           if (*p != NUL && p[(l = utfc_ptr2len(p))] == NUL) {

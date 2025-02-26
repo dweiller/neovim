@@ -2041,7 +2041,7 @@ void msg_prt_line(const char *s, bool list)
       }
       if (c == TAB && (!list || curwin->w_p_lcs_chars.tab1)) {
         // tab amount depends on current column
-        n_extra = tabstop_padding(col, curbuf->b_p_ts,
+        n_extra = tabstop_padding(NULL, 0, col, curbuf->b_p_ts,
                                   curbuf->b_p_vts_array) - 1;
         if (!list) {
           sc = schar_from_ascii(' ');

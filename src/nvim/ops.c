@@ -3179,7 +3179,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
       // Don't need to insert spaces when "p" on the last position of a
       // tab or "P" on the first position.
       if (dir == FORWARD
-          ? tabstop_padding(viscol, ts, curbuf->b_p_vts_array) != 1
+          ? tabstop_padding(NULL, 0, viscol, ts, curbuf->b_p_vts_array) != 1
           : curwin->w_cursor.coladd > 0) {
         coladvance_force(viscol);
       } else {

@@ -1808,7 +1808,7 @@ static colnr_T scroll_line_len(linenr_T lnum)
   char *line = ml_get(lnum);
   if (*line != NUL) {
     while (true) {
-      int numchar = win_chartabsize(curwin, line, col);
+      int numchar = win_chartabsize(curwin, line, lnum, col);
       MB_PTR_ADV(line);
       if (*line == NUL) {    // don't count the last character
         break;

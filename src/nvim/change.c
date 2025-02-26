@@ -731,9 +731,9 @@ void ins_char_bytes(char *buf, size_t charlen)
       // cells.  May result in adding spaces to fill a gap.
       colnr_T vcol;
       getvcol(curwin, &curwin->w_cursor, NULL, &vcol, NULL);
-      colnr_T new_vcol = vcol + win_chartabsize(curwin, buf, vcol);
+      colnr_T new_vcol = vcol + win_chartabsize(curwin, buf, lnum, vcol);
       while (oldp[col + oldlen] != NUL && vcol < new_vcol) {
-        vcol += win_chartabsize(curwin, oldp + col + oldlen, vcol);
+        vcol += win_chartabsize(curwin, oldp + col + oldlen, lnum, vcol);
         // Don't need to remove a TAB that takes us to the right
         // position.
         if (vcol > new_vcol && oldp[col + oldlen] == TAB) {
@@ -971,7 +971,7 @@ bool copy_indent(int size, char *src)
     // Count/copy the usable portion of the source line.
     while (todo > 0 && ascii_iswhite(*s)) {
       if (*s == TAB) {
-        tab_pad = tabstop_padding(ind_done,
+        tab_pad = tabstop_padding(NULL, 0, ind_done,
                                   curbuf->b_p_ts,
                                   curbuf->b_p_vts_array);
 
@@ -996,7 +996,7 @@ bool copy_indent(int size, char *src)
     }
 
     // Fill to next tabstop with a tab, if possible.
-    tab_pad = tabstop_padding(ind_done, curbuf->b_p_ts, curbuf->b_p_vts_array);
+    tab_pad = tabstop_padding(NULL, 0, ind_done, curbuf->b_p_ts, curbuf->b_p_vts_array);
 
     if ((todo >= tab_pad) && !curbuf->b_p_et) {
       todo -= tab_pad;
@@ -1011,7 +1011,7 @@ bool copy_indent(int size, char *src)
     // Add tabs required for indent.
     if (!curbuf->b_p_et) {
       while (true) {
-        tab_pad = tabstop_padding(ind_col,
+        tab_pad = tabstop_padding(NULL, 0, ind_col,
                                   curbuf->b_p_ts,
                                   curbuf->b_p_vts_array);
         if (todo < tab_pad) {

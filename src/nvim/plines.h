@@ -23,6 +23,7 @@ typedef struct {
   int indent_width;          ///< Width of 'showbreak' and 'breakindent' on wrapped
                              ///< parts of lines, INT_MIN if not yet calculated.
 
+  int lnum;
   int virt_row;              ///< Row for virtual text, -1 if no virtual text.
   int cur_text_width_left;   ///< Width of virtual text left of cursor.
   int cur_text_width_right;  ///< Width of virtual text right of cursor.

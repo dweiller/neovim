@@ -216,11 +216,12 @@ static void margin_columns_win(win_T *wp, int *left_col, int *right_col)
 /// and don't advance *pp
 ///
 /// Handles composing chars
-static int line_putchar(buf_T *buf, const char **pp, schar_T *dest, int maxcells, int vcol)
+static int line_putchar(win_T *wp, linenr_T lnum, const char **pp, schar_T *dest, int maxcells, int vcol)
 {
   // Caller should handle overwriting the right half of a double-width char.
   assert(dest[0] != 0);
 
+  buf_T *buf = wp->w_buffer;
   const char *p = *pp;
   int cells = utf_ptr2cells(p);
   int c_len = utfc_ptr2len(p);
@@ -231,7 +232,7 @@ static int line_putchar(buf_T *buf, const char **pp, schar_T *dest, int maxcells
   }
 
   if (*p == TAB) {
-    cells = MIN(tabstop_padding(vcol, buf->b_p_ts, buf->b_p_vts_array), maxcells);
+    cells = MIN(tabstop_padding(wp, lnum, vcol, buf->b_p_ts, buf->b_p_vts_array), maxcells);
   }
 
   // When overwriting the left half of a double-width char, clear the right half.
@@ -254,7 +255,7 @@ static int line_putchar(buf_T *buf, const char **pp, schar_T *dest, int maxcells
   return cells;
 }
 
-static void draw_virt_text(win_T *wp, buf_T *buf, int col_off, int *end_col, int win_row)
+static void draw_virt_text(win_T *wp, buf_T *buf, linenr_T lnum, int col_off, int *end_col, int win_row)
 {
   DecorState *const state = &decor_state;
   int const max_col = wp->w_grid.cols;
@@ -344,7 +345,7 @@ static void draw_virt_text(win_T *wp, buf_T *buf, int col_off, int *end_col, int
     }
     if (vt) {
       int vcol = item->draw_col - col_off;
-      int col = draw_virt_text_item(buf, item->draw_col, vt->data.virt_text,
+      int col = draw_virt_text_item(wp, lnum, item->draw_col, vt->data.virt_text,
                                     vt->hl_mode, max_col, vcol);
       if (do_eol && ((vt->pos == kVPosEndOfLine) || (vt->pos == kVPosEndOfLineRightAlign))) {
         state->eol_col = col + 1;
@@ -357,8 +358,8 @@ static void draw_virt_text(win_T *wp, buf_T *buf, int col_off, int *end_col, int
   }
 }
 
-static int draw_virt_text_item(buf_T *buf, int col, VirtText vt, HlMode hl_mode, int max_col,
-                               int vcol)
+static int draw_virt_text_item(win_T *wp, linenr_T lnum, int col, VirtText vt, HlMode hl_mode,
+                               int max_col, int vcol)
 {
   const char *p = "";
   int virt_attr = 0;
@@ -397,7 +398,7 @@ static int draw_virt_text_item(buf_T *buf, int col, VirtText vt, HlMode hl_mode,
       // Clear the right half as well for the assertion in line_putchar().
       linebuf_char[col] = schar_from_ascii(' ');
     }
-    int cells = line_putchar(buf, &p, through ? dummy : &linebuf_char[col],
+    int cells = line_putchar(wp, lnum, &p, through ? dummy : &linebuf_char[col],
                              maxcells, vcol);
     for (int c = 0; c < cells; c++) {
       linebuf_attr[col] = attr;
@@ -414,7 +415,7 @@ static void draw_col_buf(win_T *wp, winlinevars_T *wlv, const char *text, size_t
 {
   const char *ptr = text;
   while (ptr < text + len && wlv->off < wp->w_grid.cols) {
-    int cells = line_putchar(wp->w_buffer, &ptr, &linebuf_char[wlv->off],
+    int cells = line_putchar(wp, wlv->lnum, &ptr, &linebuf_char[wlv->off],
                              wp->w_grid.cols - wlv->off, wlv->off);
     int myattr = attr;
     if (inc_vcol) {
@@ -1694,7 +1695,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
 
     // When still displaying '$' of change command, stop at cursor.
     if (dollar_vcol >= 0 && in_curline && wlv.vcol >= wp->w_virtcol) {
-      draw_virt_text(wp, buf, win_col_offset, &wlv.col, wlv.row);
+      draw_virt_text(wp, buf, lnum, win_col_offset, &wlv.col, wlv.row);
       // don't clear anything after wlv.col
       wlv_put_linebuf(wp, &wlv, wlv.col, false, bg_attr, 0);
       // Pretend we have finished updating the window.  Except when
@@ -2193,7 +2194,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
           }
 
           if (mb_c == TAB && wlv.n_extra + wlv.col > grid->cols) {
-            wlv.n_extra = tabstop_padding(wlv.vcol, wp->w_buffer->b_p_ts,
+            wlv.n_extra = tabstop_padding(wp, lnum, wlv.vcol, wp->w_buffer->b_p_ts,
                                           wp->w_buffer->b_p_vts_array) - 1;
           }
           wlv.sc_extra = schar_from_ascii(mb_off > 0 ? MB_FILLER_CHAR : ' ');
@@ -2281,7 +2282,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
             vcol_adjusted = wlv.vcol - mb_charlen(sbr);
           }
           // tab amount depends on current column
-          tab_len = tabstop_padding(vcol_adjusted,
+          tab_len = tabstop_padding(wp, lnum, vcol_adjusted,
                                     wp->w_buffer->b_p_ts,
                                     wp->w_buffer->b_p_vts_array) - 1;
 
@@ -2701,9 +2702,9 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       }
 
       if (kv_size(fold_vt) > 0) {
-        draw_virt_text_item(buf, win_col_offset, fold_vt, kHlModeCombine, grid->cols, 0);
+        draw_virt_text_item(wp, lnum, win_col_offset, fold_vt, kHlModeCombine, grid->cols, 0);
       }
-      draw_virt_text(wp, buf, win_col_offset, &wlv.col, wlv.row);
+      draw_virt_text(wp, buf, lnum, win_col_offset, &wlv.col, wlv.row);
       // Set increasing virtual columns in grid->vcols[] to set correct curswant
       // (or "coladd" for 'virtualedit') when clicking after end of line.
       wlv_put_linebuf(wp, &wlv, wlv.col, true, bg_attr, SLF_INC_VCOL);
@@ -2943,10 +2944,10 @@ end_check:
       }
 
       if (virt_line_offset >= 0) {
-        draw_virt_text_item(buf, virt_line_offset, kv_A(virt_lines, virt_line_index).line,
+        draw_virt_text_item(wp, lnum, virt_line_offset, kv_A(virt_lines, virt_line_index).line,
                             kHlModeReplace, grid->cols, 0);
       } else if (wlv.filler_todo <= 0) {
-        draw_virt_text(wp, buf, win_col_offset, &draw_col, wlv.row);
+        draw_virt_text(wp, buf, lnum, win_col_offset, &draw_col, wlv.row);
       }
 
       wlv_put_linebuf(wp, &wlv, draw_col, true, bg_attr, wrap ? SLF_WRAP : 0);

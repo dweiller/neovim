@@ -117,9 +117,12 @@ bool tabstop_set(char *var, colnr_T **array)
 /// Calculate the number of screen spaces a tab will occupy.
 /// If "vts" is set then the tab widths are taken from that array,
 /// otherwise the value of ts is used.
-int tabstop_padding(colnr_T col, OptInt ts_arg, const colnr_T *vts)
+int tabstop_padding(win_T *wp, linenr_T lnum, colnr_T col, OptInt ts_arg, const colnr_T *vts)
   FUNC_ATTR_PURE
 {
+  if (wp != NULL && wp->w_buffer->b_p_ets && lnum > 0) {
+    return elastic_tabstop_padding(wp, lnum, col, ts_arg);
+  }
   OptInt ts = ts_arg == 0 ? 8 : ts_arg;
   colnr_T tabcol = 0;
   int t;
@@ -147,40 +150,48 @@ int tabstop_padding(colnr_T col, OptInt ts_arg, const colnr_T *vts)
 
 /// Calculate the width of an elastic tabstop cell.
 /// The line must have at least `cell + 1` many tabs.
-int elastic_tabstop_cell_size(int cell, linenr_T lnum, buf_T *buf)
+int elastic_tabstop_line_cell_size(win_T *wp, int cell, linenr_T lnum)
 {
-  int line_len = ml_get_buf_len(buf, lnum);
+  buf_T *buf = wp->w_buffer;
+  char *line = ml_get_buf(buf, lnum);
 
-  char *ml = ml_get_buf(buf, lnum);
+  colnr_T line_len;
+  if (*line == NUL) {
+    line_len = 0;
+  } else {
+    line_len = buf->b_ml.ml_line_len - 1;
+  }
+
   int tab_count = 0;
 
   int col_start = 0;
 
   for (; tab_count < cell && col_start < line_len; col_start++) {
-    if (ml[col_start] == '\t') {
+    if (line[col_start] == '\t') {
       tab_count++;
     }
   }
 
-  int cell_size = line_len - col_start;
+  int cell_len = line_len - col_start;
   for (int i = col_start; i < line_len; i++) {
-    if (ml[i] == '\t') {
-      cell_size = i - col_start;
+    if (line[i] == '\t') {
+      cell_len = i - col_start;
       break;
     }
   }
 
-  return cell_size;
+  return win_linetabsize(wp, lnum, &line[col_start], cell_len);
 }
 
-int elastic_tabstop_column_block_cell_size(int cell, linenr_T start, int line_count, buf_T *buf)
+int elastic_tabstop_column_block_cell_size(win_T *wp, int cell, linenr_T start, linenr_T end)
 {
-  assert(start + line_count <= buf->b_ml.ml_line_count);
+  assert(0 < start);
+  assert(end <= wp->w_buffer->b_ml.ml_line_count);
 
   int block_cell_size = 0;
 
-  for (int i = start; i < start + line_count; i++) {
-    int cell_size = elastic_tabstop_cell_size(cell, i, buf);
+  for (int i = start; i <= end; i++) {
+    int cell_size = elastic_tabstop_line_cell_size(wp, cell, i);
     if (block_cell_size < cell_size) {
       block_cell_size = cell_size;
     }
@@ -204,39 +215,41 @@ int line_tab_count(linenr_T lnum, buf_T *buf)
   return tab_count;
 }
 
-linenr_T column_block_start(int cell, linenr_T line, buf_T *buf)
+linenr_T column_block_start(int cell, linenr_T lnum, buf_T *buf)
 {
-  assert(line < buf->b_ml.ml_line_count);
+  assert(0 < lnum);
+  assert(lnum <= buf->b_ml.ml_line_count);
 
-  for (int l = line - 1; l > 0; l--) {
-    if (line_tab_count(l, buf) < cell) {
-      return l + 1;
+  for (int l = lnum; l > 1; l--) {
+    if (line_tab_count(l - 1, buf) < cell) {
+      return l;
     }
   }
 
   return 1;
 }
 
-linenr_T column_block_end(int cell, linenr_T line, buf_T *buf)
+linenr_T column_block_end(int cell, linenr_T lnum, buf_T *buf)
 {
   int line_count = buf->b_ml.ml_line_count;
-  assert(line < line_count);
+  assert(0 < lnum);
+  assert(lnum <= line_count);
 
-  for (int l = line + 1; l < line_count; l++) {
+  for (int l = lnum + 1; l <= line_count; l++) {
     if (line_tab_count(l, buf) < cell) {
       return l - 1;
     }
   }
 
-  return line;
+  return lnum;
 }
 
-int elastic_tabstop_padding(colnr_T col, linenr_T lnum, OptInt ts_arg, buf_T *buf)
+int elastic_tabstop_padding(win_T *wp, linenr_T lnum, colnr_T col, OptInt ts_arg)
 {
-  int ts = ts_arg == 0 ? 8 : ts_arg;
+  int ts = ts_arg == 0 ? 1 : ts_arg;
   int ts_before = 0;
+  buf_T *buf = wp->w_buffer;
   char *ml = ml_get_buf(buf, lnum);
-  assert(col < ml_get_buf_len(buf, lnum));
 
   for (int i = 0; i <= col; i++) {
     if (ml[i] == '\t') {
@@ -250,11 +263,18 @@ int elastic_tabstop_padding(colnr_T col, linenr_T lnum, OptInt ts_arg, buf_T *bu
   colnr_T ts_index = 0;
 
   for (int cell = 0; cell <= ts_before; cell++) {
-    int size = elastic_tabstop_column_block_cell_size(cell, start, end - start + 1, buf);
+    int size = elastic_tabstop_column_block_cell_size(wp, cell, start, end);
     ts_index += size == 0 ? ts : size;
   }
 
   return ts_index - col;
+}
+
+int elastic_tabstop_cell_size(win_T *wp, int cell, linenr_T lnum)
+{
+  linenr_T start = column_block_start(cell, lnum, wp->w_buffer);
+  linenr_T end = column_block_end(cell, lnum, wp->w_buffer);
+  return elastic_tabstop_column_block_cell_size(wp, cell, start, end);
 }
 
 /// Find the size of the tab that covers a particular column.
@@ -298,6 +318,24 @@ int tabstop_at(colnr_T col, OptInt ts, const colnr_T *vts, bool left)
   }
 
   return tab_size;
+}
+
+int elastic_tabstop_at(win_T *wp, colnr_T col, linenr_T lnum, OptInt shift_arg)
+{
+  int ts_before = 0;
+  char *ml = ml_get_buf(wp->w_buffer, lnum);
+
+  for (int i = 0; i <= col; i++) {
+    if (ml[i] == '\t') {
+      ts_before += 1;
+    }
+  }
+
+  if (ts_before == col + 1) {
+    return shift_arg == 0 ? 8 : shift_arg;
+  }
+
+  return elastic_tabstop_cell_size(wp, ts_before, lnum);
 }
 
 /// Find the column on which a tab starts.
@@ -616,7 +654,7 @@ bool set_indent(int size, int flags)
       // Count as many characters as we can use.
       while (todo > 0 && ascii_iswhite(*p)) {
         if (*p == TAB) {
-          tab_pad = tabstop_padding(ind_done,
+          tab_pad = tabstop_padding(NULL, 0, ind_done,
                                     curbuf->b_p_ts,
                                     curbuf->b_p_vts_array);
 
@@ -643,7 +681,7 @@ bool set_indent(int size, int flags)
         orig_char_len = ind_len;
       }
       // Fill to next tabstop with a tab, if possible.
-      tab_pad = tabstop_padding(ind_done,
+      tab_pad = tabstop_padding(NULL, 0, ind_done,
                                 curbuf->b_p_ts,
                                 curbuf->b_p_vts_array);
       if ((todo >= tab_pad) && (orig_char_len == -1)) {
@@ -658,7 +696,7 @@ bool set_indent(int size, int flags)
 
     // Count tabs required for indent.
     while (true) {
-      tab_pad = tabstop_padding(ind_col, curbuf->b_p_ts, curbuf->b_p_vts_array);
+      tab_pad = tabstop_padding(NULL, 0, ind_col, curbuf->b_p_ts, curbuf->b_p_vts_array);
       if (todo < tab_pad) {
         break;
       }
@@ -749,7 +787,7 @@ bool set_indent(int size, int flags)
 
       while (todo > 0 && ascii_iswhite(*p)) {
         if (*p == TAB) {
-          tab_pad = tabstop_padding(ind_done,
+          tab_pad = tabstop_padding(NULL, 0, ind_done,
                                     curbuf->b_p_ts,
                                     curbuf->b_p_vts_array);
 
@@ -768,7 +806,7 @@ bool set_indent(int size, int flags)
       }
 
       // Fill to next tabstop with a tab, if possible.
-      tab_pad = tabstop_padding(ind_done,
+      tab_pad = tabstop_padding(NULL, 0, ind_done,
                                 curbuf->b_p_ts,
                                 curbuf->b_p_vts_array);
 
@@ -781,7 +819,7 @@ bool set_indent(int size, int flags)
     }
 
     while (true) {
-      tab_pad = tabstop_padding(ind_done,
+      tab_pad = tabstop_padding(NULL, 0, ind_done,
                                 curbuf->b_p_ts,
                                 curbuf->b_p_vts_array);
       if (todo < tab_pad) {
@@ -1025,7 +1063,7 @@ int get_breakindent_win(win_T *wp, char *line)
             // Use win_chartabsize() so that TAB size is correct,
             // while wrapping is ignored.
             while (ptr < end_ptr) {
-              indent += win_chartabsize(wp, ptr, indent);
+              indent += win_chartabsize(wp, ptr, -1, indent);
               MB_PTR_ADV(ptr);
             }
             prev_indent = indent;
@@ -1220,7 +1258,7 @@ void ex_retab(exarg_T *eap)
       if (ptr[col] == NUL) {
         break;
       }
-      vcol += win_chartabsize(curwin, ptr + col, (colnr_T)vcol);
+      vcol += win_chartabsize(curwin, ptr + col, lnum, (colnr_T)vcol);
       if (vcol >= MAXCOL) {
         emsg_text_too_long();
         break;
